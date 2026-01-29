@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "338649491517",
+    "project_id": "ecocart-ea359",
+    "storage_bucket": "ecocart-ea359.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:338649491517:android:ee5bbd5ebcd7c9cf0a6254",
+        "android_client_info": {
+          "package_name": "com.example.ecocart"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "338649491517-eqpkhe1puv4vsnvo6vpit1j0319uqotp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.ecocart",
+            "certificate_hash": "3fa79272a864bc02512580367def4a68417dd4eb"
+          }
+        },
+        {
+          "client_id": "338649491517-ajh6dc5vo3l7ta8jbtk20psllj9u5jo3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD1SwXvJeAnkwhRwtQnv4UkNXuRD7tlSX4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "338649491517-ajh6dc5vo3l7ta8jbtk20psllj9u5jo3.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "338649491517-8knr6hbsd07iojje181ddq91fbipsmd6.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ecocart"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
