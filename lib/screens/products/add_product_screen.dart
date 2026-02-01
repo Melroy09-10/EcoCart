@@ -5,7 +5,7 @@ import '../../models/product_model.dart';
 import '../../widgets/app_drawer.dart';
 
 class AddProductScreen extends StatefulWidget {
-  final ProductModel? product; // ✅ IMPORTANT
+  final ProductModel? product;
 
   const AddProductScreen({super.key, this.product});
 
@@ -19,19 +19,17 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController priceController = TextEditingController();
+  final TextEditingController stockController = TextEditingController();
+  final TextEditingController descriptionController =
+      TextEditingController();
   final TextEditingController imageUrlController =
       TextEditingController();
 
   final List<String> imageUrls = [];
 
-  String category = 'Men';
-
-  final Map<String, TextEditingController> sizeControllers = {
-    'S': TextEditingController(),
-    'M': TextEditingController(),
-    'L': TextEditingController(),
-    'XL': TextEditingController(),
-  };
+  String category = 'Vegetables';
+  String unit = 'kg';
+  bool isAvailable = true;
 
   @override
   void initState() {
@@ -39,15 +37,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     // 🔥 PREFILL WHEN EDITING
     if (widget.product != null) {
-      nameController.text = widget.product!.name;
-      priceController.text =
-          widget.product!.price.toString();
-      category = widget.product!.category;
-      imageUrls.addAll(widget.product!.images);
-
-      widget.product!.sizes.forEach((k, v) {
-        sizeControllers[k]?.text = v.toString();
-      });
+      final p = widget.product!;
+      nameController.text = p.name;
+      priceController.text = p.price.toString();
+      stockController.text = p.stock.toString();
+      descriptionController.text = p.description;
+      category = p.category;
+      unit = p.unit;
+      isAvailable = p.isAvailable;
+      imageUrls.addAll(p.images);
     }
   }
 
@@ -60,7 +58,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
       ),
       drawer: AppDrawer(),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -69,9 +66,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _field(nameController, 'Product Name'),
+
               _field(
                 priceController,
                 'Price',
+                keyboard: TextInputType.number,
+              ),
+
+              _field(
+                stockController,
+                'Stock Quantity',
                 keyboard: TextInputType.number,
               ),
 
@@ -79,7 +83,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 value: category,
                 decoration:
                     const InputDecoration(labelText: 'Category'),
-                items: ['Men', 'Women', 'Kids', 'Accessories']
+                items: [
+                  'Vegetables',
+                  'Fruits',
+                  'Cold Drinks',
+                  'Snacks',
+                ]
                     .map(
                       (c) => DropdownMenuItem(
                         value: c,
@@ -90,8 +99,36 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 onChanged: (v) => setState(() => category = v!),
               ),
 
-              const SizedBox(height: 20),
+              DropdownButtonFormField(
+                value: unit,
+                decoration:
+                    const InputDecoration(labelText: 'Unit'),
+                items: ['kg', 'litre', 'piece']
+                    .map(
+                      (u) => DropdownMenuItem(
+                        value: u,
+                        child: Text(u),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) => setState(() => unit = v!),
+              ),
 
+              SwitchListTile(
+                value: isAvailable,
+                title: const Text('Available for Sale'),
+                onChanged: (v) =>
+                    setState(() => isAvailable = v),
+              ),
+
+              const SizedBox(height: 16),
+
+              _field(
+                descriptionController,
+                'Description',
+              ),
+
+              const SizedBox(height: 20),
               const Text(
                 'Product Images (URLs)',
                 style:
@@ -116,7 +153,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
               const SizedBox(height: 10),
 
-              // 🔥 IMAGE PREVIEW
               if (imageUrls.isNotEmpty)
                 GridView.builder(
                   shrinkWrap: true,
@@ -128,8 +164,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
                   ),
-                  itemBuilder: (context, index) {
-                    final url = imageUrls[index];
+                  itemBuilder: (_, i) {
+                    final url = imageUrls[i];
                     return Stack(
                       children: [
                         ClipRRect(
@@ -137,19 +173,14 @@ class _AddProductScreenState extends State<AddProductScreen> {
                           child: Image.network(
                             url,
                             fit: BoxFit.cover,
-                            width: double.infinity,
-                            height: double.infinity,
                           ),
                         ),
                         Positioned(
                           top: 4,
                           right: 4,
                           child: GestureDetector(
-                            onTap: () {
-                              setState(
-                                () => imageUrls.removeAt(index),
-                              );
-                            },
+                            onTap: () =>
+                                setState(() => imageUrls.removeAt(i)),
                             child: const CircleAvatar(
                               radius: 10,
                               backgroundColor: Colors.black54,
@@ -165,22 +196,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     );
                   },
                 ),
-
-              const SizedBox(height: 20),
-
-              const Text(
-                'Sizes & Quantity',
-                style:
-                    TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-
-              ...sizeControllers.entries.map(
-                (e) => _field(
-                  e.value,
-                  '${e.key} Quantity',
-                  keyboard: TextInputType.number,
-                ),
-              ),
 
               const SizedBox(height: 25),
 
@@ -202,16 +217,6 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
-  void _addImageUrl() {
-    final url = imageUrlController.text.trim();
-    if (url.isEmpty) return;
-
-    setState(() {
-      imageUrls.add(url);
-      imageUrlController.clear();
-    });
-  }
-
   Widget _field(
     TextEditingController controller,
     String label, {
@@ -229,6 +234,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  void _addImageUrl() {
+    final url = imageUrlController.text.trim();
+    if (url.isEmpty) return;
+
+    setState(() {
+      imageUrls.add(url);
+      imageUrlController.clear();
+    });
+  }
+
   Future<void> _saveProduct() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -239,18 +254,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    final sizes = <String, int>{};
-    sizeControllers.forEach((k, v) {
-      sizes[k] = int.parse(v.text);
-    });
-
     final product = ProductModel(
       id: widget.product?.id ?? '',
       name: nameController.text.trim(),
       price: double.parse(priceController.text),
       category: category,
-      sizes: sizes,
       images: imageUrls,
+      stock: int.parse(stockController.text),
+      unit: unit,
+      description: descriptionController.text.trim(),
+      isAvailable: isAvailable,
     );
 
     if (widget.product == null) {

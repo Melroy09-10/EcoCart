@@ -16,16 +16,16 @@ class CartScreen extends StatelessWidget {
   Stream<QuerySnapshot> get _cartStream => _cartRef.snapshots();
 
   Future<void> _increase(String id) async {
-    _cartRef.doc(id).update({
+    await _cartRef.doc(id).update({
       'quantity': FieldValue.increment(1),
     });
   }
 
   Future<void> _decrease(String id, int qty) async {
     if (qty <= 1) {
-      _cartRef.doc(id).delete();
+      await _cartRef.doc(id).delete();
     } else {
-      _cartRef.doc(id).update({
+      await _cartRef.doc(id).update({
         'quantity': FieldValue.increment(-1),
       });
     }
@@ -57,8 +57,12 @@ class CartScreen extends StatelessWidget {
           }
 
           double total = 0;
-          for (var d in docs) {
-            total += d['price'] * d['quantity'];
+
+          for (var doc in docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            final price = (data['price'] as num?)?.toDouble() ?? 0.0;
+            final qty = data['quantity'] ?? 0;
+            total += price * qty;
           }
 
           return Column(
@@ -68,25 +72,46 @@ class CartScreen extends StatelessWidget {
                   padding: const EdgeInsets.all(12),
                   itemCount: docs.length,
                   itemBuilder: (_, i) {
-                    final item = docs[i];
+                    final doc = docs[i];
+                    final data =
+                        doc.data() as Map<String, dynamic>;
+
+                    final name = data['name'] ?? 'Product';
+                    final image = data['image'] ?? '';
+                    final price =
+                        (data['price'] as num?)?.toDouble() ?? 0.0;
+                    final unit = data['unit'] ?? 'piece';
+                    final qty = data['quantity'] ?? 0;
+
                     return Card(
                       elevation: 2,
-                      margin: const EdgeInsets.only(bottom: 12),
+                      margin:
+                          const EdgeInsets.only(bottom: 12),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius:
+                            BorderRadius.circular(14),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.network(
-                                item['image'],
-                                height: 80,
-                                width: 80,
-                                fit: BoxFit.cover,
-                              ),
+                              borderRadius:
+                                  BorderRadius.circular(12),
+                              child: image.isNotEmpty
+                                  ? Image.network(
+                                      image,
+                                      height: 80,
+                                      width: 80,
+                                      fit: BoxFit.cover,
+                                    )
+                                  : Container(
+                                      height: 80,
+                                      width: 80,
+                                      color: Colors.grey.shade200,
+                                      child: const Icon(
+                                          Icons.image),
+                                    ),
                             ),
                             const SizedBox(width: 12),
 
@@ -96,26 +121,28 @@ class CartScreen extends StatelessWidget {
                                     CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    item['name'],
+                                    name,
                                     style: const TextStyle(
                                       fontSize: 16,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight:
+                                          FontWeight.bold,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Size: ${item['size']}',
+                                    '₹ $price / $unit',
                                     style: const TextStyle(
                                       color: Colors.grey,
                                     ),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    '₹ ${item['price']}',
+                                    '₹ ${price * qty}',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       color: Colors.green,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight:
+                                          FontWeight.bold,
                                     ),
                                   ),
                                 ],
@@ -125,22 +152,25 @@ class CartScreen extends StatelessWidget {
                             Column(
                               children: [
                                 IconButton(
-                                  icon: const Icon(Icons.add),
+                                  icon:
+                                      const Icon(Icons.add),
                                   onPressed: () =>
-                                      _increase(item.id),
+                                      _increase(doc.id),
                                 ),
                                 Text(
-                                  item['quantity'].toString(),
+                                  qty.toString(),
                                   style: const TextStyle(
                                     fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight:
+                                        FontWeight.bold,
                                   ),
                                 ),
                                 IconButton(
-                                  icon: const Icon(Icons.remove),
+                                  icon:
+                                      const Icon(Icons.remove),
                                   onPressed: () => _decrease(
-                                    item.id,
-                                    item['quantity'],
+                                    doc.id,
+                                    qty,
                                   ),
                                 ),
                               ],
@@ -156,7 +186,7 @@ class CartScreen extends StatelessWidget {
               /// 🔥 STICKY CHECKOUT BAR
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: Colors.white,
                   boxShadow: [
                     BoxShadow(
@@ -190,8 +220,9 @@ class CartScreen extends StatelessWidget {
                       height: 48,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          shape: RoundedRectangleBorder(
+                          backgroundColor: Colors.green,
+                          shape:
+                              RoundedRectangleBorder(
                             borderRadius:
                                 BorderRadius.circular(12),
                           ),

@@ -46,13 +46,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.shopping_bag,
+                        Icons.shopping_cart,
                         size: 48,
                         color: primaryColor,
                       ),
                       const SizedBox(height: 10),
+
                       appText(
-                        "EcoCart",
+                        "EcoCart Grocery",
                         size: 26,
                         weight: FontWeight.bold,
                       ),
@@ -69,17 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           prefixIcon: Icon(Icons.email),
                           border: OutlineInputBorder(),
                         ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return "Please enter your email address";
-                          }
-                          if (!RegExp(
-                                  r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                              .hasMatch(value.trim())) {
-                            return "Please enter a valid email (example: name@gmail.com)";
-                          }
-                          return null;
-                        },
+                        validator: _validateEmail,
                       ),
                       const SizedBox(height: 15),
 
@@ -104,15 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                           ),
                         ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return "Please enter your password";
-                          }
-                          if (value.length < 6) {
-                            return "Password must be at least 6 characters long";
-                          }
-                          return null;
-                        },
+                        validator: _validatePassword,
                       ),
                       const SizedBox(height: 25),
 
@@ -168,6 +151,33 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  // ================= VALIDATIONS =================
+
+  String? _validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return "Email is required";
+    }
+
+    final emailRegex =
+        RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+
+    if (!emailRegex.hasMatch(value.trim())) {
+      return "Enter a valid email (example@gmail.com)";
+    }
+
+    return null;
+  }
+
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return "Password is required";
+    }
+    if (value.length < 6) {
+      return "Password must be at least 6 characters";
+    }
+    return null;
+  }
+
   // ================= EMAIL LOGIN =================
   Future<void> _login() async {
     if (!_formKey.currentState!.validate()) return;
@@ -181,9 +191,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (user != null && mounted) {
-        await context
-            .read<CartProvider>()
-            .loadCartFromFirestore();
+        await context.read<CartProvider>().loadCart();
 
         Navigator.pushReplacement(
           context,
@@ -207,9 +215,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final user = await _authService.signInWithGoogle();
 
       if (user != null && mounted) {
-        await context
-            .read<CartProvider>()
-            .loadCartFromFirestore();
+        await context.read<CartProvider>().loadCart();
 
         Navigator.pushReplacement(
           context,
@@ -227,20 +233,22 @@ class _LoginScreenState extends State<LoginScreen> {
     if (mounted) setState(() => loading = false);
   }
 
-  // ================= FRIENDLY ERROR MESSAGES =================
+  // ================= FRIENDLY ERROR HANDLING =================
   String _friendlyAuthError(String error) {
-    if (error.contains('user-not-found')) {
-      return "No account found with this email. Please register first.";
-    } else if (error.contains('wrong-password')) {
+    final err = error.toLowerCase();
+
+    if (err.contains('user-not-found')) {
+      return "No account found with this email.";
+    } else if (err.contains('wrong-password')) {
       return "Incorrect password. Please try again.";
-    } else if (error.contains('invalid-email')) {
-      return "The email address entered is not valid.";
-    } else if (error.contains('user-disabled')) {
-      return "This account has been disabled. Please contact support.";
-    } else if (error.contains('network-request-failed')) {
-      return "No internet connection. Please check your network.";
+    } else if (err.contains('invalid-email')) {
+      return "Invalid email address.";
+    } else if (err.contains('user-disabled')) {
+      return "This account has been disabled.";
+    } else if (err.contains('network-request-failed')) {
+      return "No internet connection.";
     } else {
-      return "Something went wrong. Please try again later.";
+      return "Login failed. Please try again.";
     }
   }
 

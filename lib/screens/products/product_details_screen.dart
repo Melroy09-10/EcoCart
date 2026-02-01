@@ -17,19 +17,12 @@ class ProductDetailsScreen extends StatefulWidget {
 }
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
-  late String selectedSize;
   int quantity = 1;
-
-  @override
-  void initState() {
-    super.initState();
-    selectedSize = widget.product.sizes.keys.first;
-  }
 
   @override
   Widget build(BuildContext context) {
     final cart = Provider.of<CartProvider>(context);
-    final int stock = widget.product.sizes[selectedSize] ?? 0;
+    final int stock = widget.product.stock;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,6 +40,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               options: CarouselOptions(
                 height: 260,
                 viewportFraction: 1,
+                enableInfiniteScroll: false,
               ),
               items: widget.product.images
                   .map(
@@ -74,7 +68,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   const SizedBox(height: 8),
 
                   Text(
-                    '₹ ${widget.product.price}',
+                    '₹ ${widget.product.price} / ${widget.product.unit}',
                     style: const TextStyle(
                       fontSize: 20,
                       color: Colors.green,
@@ -82,35 +76,30 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // 🔹 SIZE SELECTION
-                  const Text(
-                    'Select Size',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
                   const SizedBox(height: 10),
 
-                  Wrap(
-                    spacing: 8,
-                    children:
-                        widget.product.sizes.entries.map((entry) {
-                      final size = entry.key;
-                      final qty = entry.value;
+                  if (widget.product.description.isNotEmpty)
+                    Text(
+                      widget.product.description,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: Colors.black87,
+                      ),
+                    ),
 
-                      return ChoiceChip(
-                        label: Text('$size ($qty)'),
-                        selected: selectedSize == size,
-                        onSelected: qty == 0
-                            ? null
-                            : (_) {
-                                setState(() {
-                                  selectedSize = size;
-                                  quantity = 1;
-                                });
-                              },
-                      );
-                    }).toList(),
+                  const SizedBox(height: 20),
+
+                  // 🔹 STOCK INFO
+                  Text(
+                    stock > 0
+                        ? 'Available stock: $stock ${widget.product.unit}'
+                        : 'Out of stock',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: stock > 0
+                          ? Colors.green
+                          : Colors.red,
+                    ),
                   ),
 
                   const SizedBox(height: 20),
@@ -139,8 +128,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             ? () => setState(() => quantity++)
                             : null,
                       ),
-                      const SizedBox(width: 10),
-                      Text('Available: $stock'),
                     ],
                   ),
 
@@ -149,13 +136,16 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                   // 🔥 ADD TO CART
                   SizedBox(
                     width: double.infinity,
+                    height: 48,
                     child: ElevatedButton(
-                      onPressed: stock == 0
+                      onPressed: (!widget.product.isAvailable ||
+                              stock == 0)
                           ? null
                           : () {
-                              // ✅ CORRECT METHOD
-                              for (int i = 0; i < quantity; i++) {
-                                cart.add(widget.product, selectedSize);
+                              for (int i = 0;
+                                  i < quantity;
+                                  i++) {
+                                cart.add(widget.product);
                               }
 
                               ScaffoldMessenger.of(context)
@@ -166,7 +156,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                               );
                             },
-                      child: const Text('Add to Cart'),
+                      child: const Text(
+                        'Add to Cart',
+                        style: TextStyle(fontSize: 16),
+                      ),
                     ),
                   ),
                 ],

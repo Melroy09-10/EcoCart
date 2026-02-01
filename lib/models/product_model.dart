@@ -4,7 +4,12 @@ class ProductModel {
   final double price;
   final String category;
   final List<String> images;
-  final Map<String, int> sizes;
+
+  // 🛒 GROCERY FIELDS
+  final int stock;
+  final String unit; // kg / litre / piece
+  final String description;
+  final bool isAvailable;
 
   ProductModel({
     required this.id,
@@ -12,20 +17,28 @@ class ProductModel {
     required this.price,
     required this.category,
     required this.images,
-    required this.sizes,
+    required this.stock,
+    required this.unit,
+    required this.description,
+    required this.isAvailable,
   });
 
   // ================= FIRESTORE =================
-
+  // 🔥 SAFE AGAINST OLD DATA (NO CRASH)
   factory ProductModel.fromMap(
       Map<String, dynamic> map, String docId) {
     return ProductModel(
       id: docId,
-      name: map['name'],
-      price: (map['price'] as num).toDouble(),
-      category: map['category'],
-      images: List<String>.from(map['images']),
-      sizes: Map<String, int>.from(map['sizes']),
+      name: map['name'] ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+      category: map['category'] ?? '',
+      images: List<String>.from(map['images'] ?? []),
+
+      // ✅ SAFE FALLBACKS
+      stock: map['stock'] ?? 0,
+      unit: map['unit'] ?? 'piece',
+      description: map['description'] ?? '',
+      isAvailable: map['isAvailable'] ?? true,
     );
   }
 
@@ -35,20 +48,25 @@ class ProductModel {
       'price': price,
       'category': category,
       'images': images,
-      'sizes': sizes,
+      'stock': stock,
+      'unit': unit,
+      'description': description,
+      'isAvailable': isAvailable,
     };
   }
 
   // ================= LOCAL STORAGE (CART) =================
-
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     return ProductModel(
-      id: json['id'],
-      name: json['name'],
-      price: (json['price'] as num).toDouble(),
-      category: json['category'],
-      images: List<String>.from(json['images']),
-      sizes: Map<String, int>.from(json['sizes']),
+      id: json['id'] ?? '',
+      name: json['name'] ?? '',
+      price: (json['price'] as num?)?.toDouble() ?? 0.0,
+      category: json['category'] ?? '',
+      images: List<String>.from(json['images'] ?? []),
+      stock: json['stock'] ?? 0,
+      unit: json['unit'] ?? 'piece',
+      description: json['description'] ?? '',
+      isAvailable: json['isAvailable'] ?? true,
     );
   }
 
@@ -59,7 +77,10 @@ class ProductModel {
       'price': price,
       'category': category,
       'images': images,
-      'sizes': sizes,
+      'stock': stock,
+      'unit': unit,
+      'description': description,
+      'isAvailable': isAvailable,
     };
   }
 }

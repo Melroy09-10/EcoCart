@@ -7,37 +7,32 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/product_model.dart';
 
+/// ================= CART ITEM =================
 class CartItem {
   final ProductModel product;
-  final String size;
   int quantity;
 
   CartItem({
     required this.product,
-    required this.size,
     required this.quantity,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'product': product.toMap(),
-      'size': size,
+      'product': product.toJson(),
       'quantity': quantity,
     };
   }
 
   factory CartItem.fromMap(Map<String, dynamic> map) {
     return CartItem(
-      product: ProductModel.fromMap(
-  map['product'],
-  map['product']['id'],
-),
-      size: map['size'],
+      product: ProductModel.fromJson(map['product']),
       quantity: map['quantity'],
     );
   }
 }
 
+/// ================= CART PROVIDER =================
 class CartProvider extends ChangeNotifier {
   final List<CartItem> _items = [];
 
@@ -46,20 +41,19 @@ class CartProvider extends ChangeNotifier {
   int get totalItems =>
       _items.fold(0, (sum, item) => sum + item.quantity);
 
-  double get totalPrice =>
-      _items.fold(0, (sum, item) => sum + (item.product.price * item.quantity));
+  double get totalPrice => _items.fold(
+      0, (sum, item) => sum + (item.product.price * item.quantity));
 
-  // ================= ADD =================
-  void add(ProductModel product, String size) {
-    final index = _items.indexWhere(
-      (e) => e.product.id == product.id && e.size == size,
-    );
+  // ================= ADD (GROCERY) =================
+  void add(ProductModel product) {
+    final index =
+        _items.indexWhere((e) => e.product.id == product.id);
 
     if (index >= 0) {
       _items[index].quantity++;
     } else {
       _items.add(
-        CartItem(product: product, size: size, quantity: 1),
+        CartItem(product: product, quantity: 1),
       );
     }
 
@@ -69,9 +63,11 @@ class CartProvider extends ChangeNotifier {
 
   // ================= INCREASE =================
   void increase(CartItem item) {
-    item.quantity++;
-    saveCart();
-    notifyListeners();
+    if (item.quantity < item.product.stock) {
+      item.quantity++;
+      saveCart();
+      notifyListeners();
+    }
   }
 
   // ================= DECREASE =================
@@ -99,7 +95,7 @@ class CartProvider extends ChangeNotifier {
   }
 
   // ================= LOAD LOCAL =================
-  Future<void> loadCartFromFirestore() async {
+  Future<void> loadCart() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getStringList('cart_items');
 
@@ -121,9 +117,7 @@ class CartProvider extends ChangeNotifier {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    await FirebaseFirestore.instance
-        .collection('orders')
-        .add({
+    await FirebaseFirestore.instance.collection('orders').add({
       'userId': user.uid,
       'items': _items.map((e) => e.toMap()).toList(),
       'total': totalPrice,
