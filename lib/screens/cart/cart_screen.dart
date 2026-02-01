@@ -1,118 +1,218 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-import '../../providers/cart_provider.dart';
-import '../../firebase/order_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class CartScreen extends StatelessWidget {
   const CartScreen({super.key});
 
+  CollectionReference get _cartRef {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('cart');
+  }
+
+  Stream<QuerySnapshot> get _cartStream => _cartRef.snapshots();
+
+  Future<void> _increase(String id) async {
+    _cartRef.doc(id).update({
+      'quantity': FieldValue.increment(1),
+    });
+  }
+
+  Future<void> _decrease(String id, int qty) async {
+    if (qty <= 1) {
+      _cartRef.doc(id).delete();
+    } else {
+      _cartRef.doc(id).update({
+        'quantity': FieldValue.increment(-1),
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final cart = context.watch<CartProvider>();
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Cart'),
+        centerTitle: true,
       ),
-      body: cart.items.isEmpty
-          ? const Center(child: Text('Your cart is empty'))
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: cart.items.length,
-                    itemBuilder: (_, i) {
-                      final item = cart.items[i];
-                      return ListTile(
-                        leading: Image.network(
-                          item.product.images.first,
-                          width: 50,
-                          fit: BoxFit.cover,
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _cartStream,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) {
+            return const Center(
+              child: Text(
+                'Your cart is empty 🛒',
+                style: TextStyle(fontSize: 18),
+              ),
+            );
+          }
+
+          double total = 0;
+          for (var d in docs) {
+            total += d['price'] * d['quantity'];
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: docs.length,
+                  itemBuilder: (_, i) {
+                    final item = docs[i];
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.network(
+                                item['image'],
+                                height: 80,
+                                width: 80,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    item['name'],
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Size: ${item['size']}',
+                                    style: const TextStyle(
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '₹ ${item['price']}',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            Column(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.add),
+                                  onPressed: () =>
+                                      _increase(item.id),
+                                ),
+                                Text(
+                                  item['quantity'].toString(),
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.remove),
+                                  onPressed: () => _decrease(
+                                    item.id,
+                                    item['quantity'],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
-                        title: Text(item.product.name),
-                        subtitle: Text(
-                          'Size: ${item.size}  •  ₹${item.product.price}',
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              /// 🔥 STICKY CHECKOUT BAR
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 10,
+                      color: Colors.black12,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Total',
+                          style: TextStyle(fontSize: 16),
                         ),
-                        trailing: Text(
-                          'x${item.quantity}',
+                        Text(
+                          '₹ $total',
                           style: const TextStyle(
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ),
-
-                // TOTAL + CHECKOUT
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Total',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(12),
                           ),
-                          Text(
-                            '₹ ${cart.totalPrice}',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 45,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            final orderItems = cart.items
-                                .map(
-                                  (e) => {
-                                    'productId': e.product.id,
-                                    'name': e.product.name,
-                                    'price': e.product.price,
-                                    'size': e.size,
-                                    'quantity': e.quantity,
-                                  },
-                                )
-                                .toList();
-
-                            await OrderService().placeOrder(
-                              orderItems,
-                              cart.totalPrice,
-                            );
-
-                            cart.clear();
-
-                            ScaffoldMessenger.of(context)
-                                .showSnackBar(
-                              const SnackBar(
-                                content:
-                                    Text('Order placed successfully'),
-                              ),
-                            );
-
-                            Navigator.pop(context);
-                          },
-                          child: const Text('PLACE ORDER'),
+                        ),
+                        onPressed: () {
+                          Navigator.pushNamed(
+                              context, '/checkout');
+                        },
+                        child: const Text(
+                          'Proceed to Checkout',
+                          style: TextStyle(fontSize: 16),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

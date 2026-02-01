@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:carousel_slider/carousel_slider.dart';
-import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../firebase/product_service.dart';
 import '../../models/product_model.dart';
-import '../../providers/cart_provider.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/app_web_wrapper.dart';
 import '../cart/cart_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,11 +20,10 @@ class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final TextEditingController _searchController =
-      TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String searchQuery = '';
 
-  /// ✅ STORE SELECTED SIZE PER PRODUCT
+  /// Store selected size per product
   final Map<String, String> _selectedSizes = {};
 
   final List<String> categories = [
@@ -48,10 +48,58 @@ class _HomeScreenState extends State<HomeScreen>
     super.dispose();
   }
 
+  // ================= FIRESTORE CART =================
+
+  CollectionReference get _cartRef {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('cart');
+  }
+
+  Future<void> _addToCart(ProductModel product, String size) async {
+    final docId = '${product.id}_$size';
+    final ref = _cartRef.doc(docId);
+    final snap = await ref.get();
+
+    if (snap.exists) {
+      ref.update({'quantity': FieldValue.increment(1)});
+    } else {
+      ref.set({
+        'productId': product.id,
+        'name': product.name,
+        'image': product.images.first,
+        'price': product.price,
+        'size': size,
+        'quantity': 1,
+      });
+    }
+  }
+
+  Future<void> _increaseQty(String docId) async {
+    _cartRef.doc(docId).update({
+      'quantity': FieldValue.increment(1),
+    });
+  }
+
+  Future<void> _decreaseQty(String docId, int qty) async {
+    final ref = _cartRef.doc(docId);
+    if (qty <= 1) {
+      ref.delete();
+    } else {
+      ref.update({'quantity': FieldValue.increment(-1)});
+    }
+  }
+
+  Stream<DocumentSnapshot> _cartItemStream(String docId) {
+    return _cartRef.doc(docId).snapshots();
+  }
+
+  // ================= UI =================
+
   @override
   Widget build(BuildContext context) {
-    final cart = context.watch<CartProvider>();
-
     return Scaffold(
       drawer: AppDrawer(),
       backgroundColor: Colors.grey.shade100,
@@ -65,10 +113,8 @@ class _HomeScreenState extends State<HomeScreen>
           preferredSize: const Size.fromHeight(110),
           child: Column(
             children: [
-              // 🔍 SEARCH BAR
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: TextField(
                   controller: _searchController,
                   onChanged: (v) {
@@ -87,8 +133,6 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
               const SizedBox(height: 8),
-
-              // 🧭 TAB BAR
               TabBar(
                 controller: _tabController,
                 isScrollable: true,
@@ -101,54 +145,34 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.shopping_cart_outlined),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const CartScreen(),
-                    ),
-                  );
-                },
-              ),
-              if (cart.totalItems > 0)
-                Positioned(
-                  right: 6,
-                  top: 6,
-                  child: CircleAvatar(
-                    radius: 9,
-                    backgroundColor: Colors.red,
-                    child: Text(
-                      cart.totalItems.toString(),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_outlined),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CartScreen(),
                 ),
-            ],
+              );
+            },
           ),
         ],
       ),
 
-      // ================= BODY =================
-      body: TabBarView(
-        controller: _tabController,
-        children: categories.map((c) {
-          if (c == 'All') {
-            return _allProductsSectionView();
-          }
-          return _categoryGrid(c);
-        }).toList(),
+      body: AppWebWrapper(
+        child: TabBarView(
+          controller: _tabController,
+          children: categories.map((c) {
+            if (c == 'All') return _allProductsSectionView();
+            return _categoryGrid(c);
+          }).toList(),
+        ),
       ),
     );
   }
 
-  // ================= ALL PAGE (SECTION WISE) =================
+  // ================= ALL PRODUCTS =================
+
   Widget _allProductsSectionView() {
     return StreamBuilder<List<ProductModel>>(
       stream: ProductService().getProducts(),
@@ -161,21 +185,15 @@ class _HomeScreenState extends State<HomeScreen>
 
         return ListView(
           padding: const EdgeInsets.all(12),
-          children: categories
-              .where((c) => c != 'All')
-              .map((category) {
-            List<ProductModel> sectionProducts = allProducts
+          children: categories.where((c) => c != 'All').map((category) {
+            final sectionProducts = allProducts
                 .where((p) =>
                     p.category.toLowerCase() ==
                     category.toLowerCase())
+                .where((p) =>
+                    searchQuery.isEmpty ||
+                    p.name.toLowerCase().contains(searchQuery))
                 .toList();
-
-            if (searchQuery.isNotEmpty) {
-              sectionProducts = sectionProducts
-                  .where((p) =>
-                      p.name.toLowerCase().contains(searchQuery))
-                  .toList();
-            }
 
             if (sectionProducts.isEmpty) return const SizedBox();
 
@@ -216,7 +234,6 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ================= CATEGORY PAGE =================
   Widget _categoryGrid(String category) {
     return StreamBuilder<List<ProductModel>>(
       stream: ProductService().getProducts(),
@@ -225,22 +242,14 @@ class _HomeScreenState extends State<HomeScreen>
           return const Center(child: CircularProgressIndicator());
         }
 
-        List<ProductModel> products = snapshot.data!
+        final products = snapshot.data!
             .where((p) =>
                 p.category.toLowerCase() ==
                 category.toLowerCase())
+            .where((p) =>
+                searchQuery.isEmpty ||
+                p.name.toLowerCase().contains(searchQuery))
             .toList();
-
-        if (searchQuery.isNotEmpty) {
-          products = products
-              .where((p) =>
-                  p.name.toLowerCase().contains(searchQuery))
-              .toList();
-        }
-
-        if (products.isEmpty) {
-          return const Center(child: Text('No products found'));
-        }
 
         return GridView.builder(
           padding: const EdgeInsets.all(12),
@@ -259,10 +268,8 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   // ================= PRODUCT TILE =================
-  Widget _productTile(ProductModel product) {
-    final cart = context.watch<CartProvider>();
 
-    /// ✅ SAFE DEFAULT SIZE
+  Widget _productTile(ProductModel product) {
     _selectedSizes.putIfAbsent(
       product.id,
       () => product.sizes.entries
@@ -275,121 +282,145 @@ class _HomeScreenState extends State<HomeScreen>
 
     final selectedSize = _selectedSizes[product.id]!;
     final stock = product.sizes[selectedSize] ?? 0;
+    final docId = '${product.id}_$selectedSize';
 
-    final cartItem = cart.items.firstWhere(
-      (e) => e.product.id == product.id && e.size == selectedSize,
-      orElse: () => CartItem(
-        product: product,
-        size: selectedSize,
-        quantity: 0,
-      ),
-    );
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _cartItemStream(docId),
+      builder: (context, snapshot) {
+        final qty =
+            snapshot.hasData && snapshot.data!.exists
+                ? snapshot.data!['quantity']
+                : 0;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 150,
-            child: CarouselSlider(
-              options: CarouselOptions(
-                viewportFraction: 1,
-                enableInfiniteScroll: false,
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 150,
+                child: CarouselSlider(
+                  options: CarouselOptions(
+                    viewportFraction: 1,
+                    enableInfiniteScroll: false,
+                  ),
+                  items: product.images
+                      .map((img) => Image.network(
+                            img,
+                            fit: BoxFit.contain,
+                            width: double.infinity,
+                          ))
+                      .toList(),
+                ),
               ),
-              items: product.images
-                  .map((img) => Image.network(
-                        img,
-                        fit: BoxFit.contain,
-                        width: double.infinity,
-                      ))
-                  .toList(),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            product.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style:
-                const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '₹ ${product.price}',
-            style: const TextStyle(
-              color: Colors.green,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
+              const SizedBox(height: 6),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '₹ ${product.price}',
+                style: const TextStyle(
+                  color: Colors.green,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
 
-          /// ✅ SIZE SELECTOR
-          SizeSelector(
-            sizes: product.sizes,
-            selectedSize: selectedSize,
-            onChanged: (size) {
-              setState(() {
-                _selectedSizes[product.id] = size;
-              });
-            },
-          ),
+              SizeSelector(
+                sizes: product.sizes,
+                selectedSize: selectedSize,
+                onChanged: (size) {
+                  setState(() {
+                    _selectedSizes[product.id] = size;
+                  });
+                },
+              ),
 
-          const Spacer(),
+              const Spacer(),
 
-          SizedBox(
-            height: 42,
-            width: double.infinity,
-            child: stock == 0
-                ? const Center(
-                    child: Text(
-                      'OUT OF STOCK',
-                      style: TextStyle(
-                          color: Colors.red,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  )
-                : cartItem.quantity == 0
-                    ? ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
+              SizedBox(
+                height: 42,
+                width: double.infinity,
+                child: stock == 0
+                    ? const Center(
+                        child: Text(
+                          'OUT OF STOCK',
+                          style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.bold),
                         ),
-                        onPressed: () =>
-                            cart.add(product, selectedSize),
-                        child: const Text('ADD'),
                       )
-                    : Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.spaceEvenly,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.remove,
-                                color: Colors.orange),
+                    : qty == 0
+                        ? ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.orange,
+                            ),
                             onPressed: () =>
-                                cart.decrease(cartItem),
-                          ),
-                          Text(cartItem.quantity.toString()),
-                          IconButton(
-                            icon: const Icon(Icons.add,
-                                color: Colors.orange),
-                            onPressed:
-                                cartItem.quantity >= stock
+                                _addToCart(product, selectedSize),
+                            child: const Text('ADD'),
+                          )
+                        : Row(
+                            mainAxisAlignment:
+                                MainAxisAlignment.spaceEvenly,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove,
+                                    color: Colors.orange),
+                                onPressed: () =>
+                                    _decreaseQty(docId, qty),
+                              ),
+
+                              // ✅ QUANTITY PILL (YOU ASKED FOR THIS)
+                              Container(
+                                padding:
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.orange.shade100,
+                                  borderRadius:
+                                      BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  qty.toString(),
+                                  style: const TextStyle(
+                                    fontWeight:
+                                        FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ),
+
+                              IconButton(
+                                icon: const Icon(Icons.add,
+                                    color: Colors.orange),
+                                onPressed: qty >= stock
                                     ? null
-                                    : () => cart.increase(cartItem),
+                                    : () =>
+                                        _increaseQty(docId),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-/// ================= SIZE SELECTOR =================
+// ================= SIZE SELECTOR =================
+
 class SizeSelector extends StatelessWidget {
   final Map<String, int> sizes;
   final String selectedSize;
@@ -415,20 +446,13 @@ class SizeSelector extends StatelessWidget {
         return GestureDetector(
           onTap: stock == 0 ? null : () => onChanged(size),
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: isSelected
                   ? Colors.orange
                   : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: stock == 0
-                    ? Colors.grey
-                    : isSelected
-                        ? Colors.orange
-                        : Colors.grey.shade300,
-              ),
             ),
             child: Text(
               size,
@@ -439,8 +463,9 @@ class SizeSelector extends StatelessWidget {
                     : isSelected
                         ? Colors.white
                         : Colors.black,
-                decoration:
-                    stock == 0 ? TextDecoration.lineThrough : null,
+                decoration: stock == 0
+                    ? TextDecoration.lineThrough
+                    : null,
               ),
             ),
           ),

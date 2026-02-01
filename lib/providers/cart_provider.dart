@@ -1,6 +1,10 @@
 import 'dart:convert';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/product_model.dart';
 
 class CartItem {
@@ -14,86 +18,118 @@ class CartItem {
     required this.quantity,
   });
 
-  Map<String, dynamic> toJson() => {
-        'product': product.toJson(),
-        'size': size,
-        'quantity': quantity,
-      };
+  Map<String, dynamic> toMap() {
+    return {
+      'product': product.toMap(),
+      'size': size,
+      'quantity': quantity,
+    };
+  }
 
-  factory CartItem.fromJson(Map<String, dynamic> json) {
+  factory CartItem.fromMap(Map<String, dynamic> map) {
     return CartItem(
-      product: ProductModel.fromJson(json['product']),
-      size: json['size'],
-      quantity: json['quantity'],
+      product: ProductModel.fromMap(
+  map['product'],
+  map['product']['id'],
+),
+      size: map['size'],
+      quantity: map['quantity'],
     );
   }
 }
 
 class CartProvider extends ChangeNotifier {
-  List<CartItem> items = [];
+  final List<CartItem> _items = [];
 
-  CartProvider() {
-    loadCart();
-  }
+  List<CartItem> get items => _items;
 
   int get totalItems =>
-      items.fold(0, (sum, item) => sum + item.quantity);
+      _items.fold(0, (sum, item) => sum + item.quantity);
 
-  double get totalPrice => items.fold(
-        0,
-        (sum, item) => sum + (item.product.price * item.quantity),
-      );
+  double get totalPrice =>
+      _items.fold(0, (sum, item) => sum + (item.product.price * item.quantity));
 
+  // ================= ADD =================
   void add(ProductModel product, String size) {
-    final index = items.indexWhere(
-        (e) => e.product.id == product.id && e.size == size);
+    final index = _items.indexWhere(
+      (e) => e.product.id == product.id && e.size == size,
+    );
 
     if (index >= 0) {
-      items[index].quantity++;
+      _items[index].quantity++;
     } else {
-      items.add(
+      _items.add(
         CartItem(product: product, size: size, quantity: 1),
       );
     }
+
     saveCart();
     notifyListeners();
   }
 
+  // ================= INCREASE =================
   void increase(CartItem item) {
     item.quantity++;
     saveCart();
     notifyListeners();
   }
 
+  // ================= DECREASE =================
   void decrease(CartItem item) {
     item.quantity--;
     if (item.quantity <= 0) {
-      items.remove(item);
+      _items.remove(item);
     }
     saveCart();
     notifyListeners();
   }
 
+  // ================= CLEAR =================
   void clear() {
-    items.clear();
+    _items.clear();
     saveCart();
     notifyListeners();
   }
 
+  // ================= LOCAL SAVE =================
   Future<void> saveCart() async {
     final prefs = await SharedPreferences.getInstance();
-    final data =
-        items.map((e) => jsonEncode(e.toJson())).toList();
-    prefs.setStringList('cart_items', data);
+    final data = _items.map((e) => jsonEncode(e.toMap())).toList();
+    await prefs.setStringList('cart_items', data);
   }
 
-  Future<void> loadCart() async {
+  // ================= LOAD LOCAL =================
+  Future<void> loadCartFromFirestore() async {
     final prefs = await SharedPreferences.getInstance();
     final data = prefs.getStringList('cart_items');
+
+    _items.clear();
+
     if (data != null) {
-      items =
-          data.map((e) => CartItem.fromJson(jsonDecode(e))).toList();
-      notifyListeners();
+      for (final item in data) {
+        _items.add(
+          CartItem.fromMap(jsonDecode(item)),
+        );
+      }
     }
+
+    notifyListeners();
+  }
+
+  // ================= SAVE ORDER =================
+  Future<void> placeOrder() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    await FirebaseFirestore.instance
+        .collection('orders')
+        .add({
+      'userId': user.uid,
+      'items': _items.map((e) => e.toMap()).toList(),
+      'total': totalPrice,
+      'createdAt': Timestamp.now(),
+    });
+
+    clear();
   }
 }

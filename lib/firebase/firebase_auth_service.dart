@@ -5,34 +5,37 @@ class FirebaseAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  // ================= EMAIL LOGIN =================
+  /// ================= EMAIL LOGIN =================
   Future<User?> login({
     required String email,
     required String password,
   }) async {
-    final userCredential =
+    final UserCredential result =
         await _auth.signInWithEmailAndPassword(
       email: email,
       password: password,
     );
-    return userCredential.user;
+    return result.user;
   }
 
-  // ================= EMAIL REGISTER =================
+  /// ================= EMAIL REGISTER =================
   Future<User?> register({
     required String email,
     required String password,
   }) async {
-    final userCredential =
+    final UserCredential result =
         await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
     );
-    return userCredential.user;
+    return result.user;
   }
 
-  // ================= GOOGLE LOGIN (STABLE) =================
+  /// ================= GOOGLE LOGIN =================
   Future<User?> signInWithGoogle() async {
+    // 🔥 FORCE ACCOUNT PICKER EVERY TIME
+    await _googleSignIn.signOut();
+
     final GoogleSignInAccount? googleUser =
         await _googleSignIn.signIn();
 
@@ -41,22 +44,24 @@ class FirebaseAuthService {
     final GoogleSignInAuthentication googleAuth =
         await googleUser.authentication;
 
-    final credential = GoogleAuthProvider.credential(
+    final AuthCredential credential =
+        GoogleAuthProvider.credential(
       accessToken: googleAuth.accessToken,
       idToken: googleAuth.idToken,
     );
 
-    final userCredential =
+    final UserCredential result =
         await _auth.signInWithCredential(credential);
 
-    return userCredential.user;
+    return result.user;
   }
 
-  // ================= LOGOUT =================
+  /// ================= LOGOUT =================
   Future<void> logout() async {
-    await _googleSignIn.signOut();
-    await _auth.signOut();
+    await _googleSignIn.signOut(); // Google logout
+    await _auth.signOut();         // Firebase logout
   }
 
+  /// ================= CURRENT USER =================
   User? get currentUser => _auth.currentUser;
 }
