@@ -118,8 +118,7 @@ class _HomeScreenState extends State<HomeScreen>
                     const EdgeInsets.symmetric(horizontal: 12),
                 child: TextField(
                   controller: _searchController,
-                  onChanged: (v) =>
-                      setState(() => searchQuery = v),
+                  onChanged: (v) => setState(() => searchQuery = v),
                   decoration: InputDecoration(
                     hintText: 'Search groceries...',
                     prefixIcon: const Icon(Icons.search),
@@ -172,29 +171,81 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // ================= ALL PRODUCTS =================
+  // ================= ALL PRODUCTS (CATEGORY ORDERED) =================
 
   Widget _allProducts() {
     return StreamBuilder<List<ProductModel>>(
       stream: ProductService().getProducts(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
 
-        return _grid(snapshot.data!);
+        final allProducts = snapshot.data!;
+
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: categories
+              .where((c) => c != 'All')
+              .map((category) {
+            final categoryProducts = allProducts
+                .where((p) =>
+                    p.category.toLowerCase() ==
+                    category.toLowerCase())
+                .where((p) =>
+                    searchQuery.isEmpty ||
+                    p.name
+                        .toLowerCase()
+                        .contains(searchQuery.toLowerCase()))
+                .toList();
+
+            if (categoryProducts.isEmpty) return const SizedBox();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(
+                    category,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                GridView.builder(
+                  shrinkWrap: true,
+                  physics:
+                      const NeverScrollableScrollPhysics(),
+                  itemCount: categoryProducts.length,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: 0.55,
+                  ),
+                  itemBuilder: (_, i) =>
+                      _productTile(categoryProducts[i]),
+                ),
+              ],
+            );
+          }).toList(),
+        );
       },
     );
   }
+
+  // ================= CATEGORY TAB =================
 
   Widget _categoryProducts(String category) {
     return StreamBuilder<List<ProductModel>>(
       stream: ProductService().getProducts(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return const Center(
-              child: CircularProgressIndicator());
+          return const Center(child: CircularProgressIndicator());
         }
 
         final products = snapshot.data!
@@ -208,27 +259,23 @@ class _HomeScreenState extends State<HomeScreen>
                     .contains(searchQuery.toLowerCase()))
             .toList();
 
-        return _grid(products);
+        return GridView.builder(
+          padding: const EdgeInsets.all(12),
+          itemCount: products.length,
+          gridDelegate:
+              const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 14,
+            mainAxisSpacing: 14,
+            childAspectRatio: 0.55,
+          ),
+          itemBuilder: (_, i) => _productTile(products[i]),
+        );
       },
     );
   }
 
-  Widget _grid(List<ProductModel> products) {
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: products.length,
-      gridDelegate:
-          const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 14,
-        mainAxisSpacing: 14,
-        childAspectRatio: 0.58,
-      ),
-      itemBuilder: (_, i) => _productTile(products[i]),
-    );
-  }
-
-  // ================= PRODUCT CARD =================
+  // ================= PRODUCT CARD (FIXED HEIGHT) =================
 
   Widget _productTile(ProductModel product) {
     final bool outOfStock =
@@ -256,9 +303,8 @@ class _HomeScreenState extends State<HomeScreen>
           ),
           padding: const EdgeInsets.all(12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 🔄 IMAGE SLIDER
+              // IMAGE SLIDER
               ClipRRect(
                 borderRadius: BorderRadius.circular(14),
                 child: SizedBox(
@@ -279,59 +325,69 @@ class _HomeScreenState extends State<HomeScreen>
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
 
-              // PRODUCT NAME
-              Text(
-                product.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-
-              const SizedBox(height: 4),
-
-              // STOCK STATUS (RELOCATED)
-              Row(
-                children: [
-                  Icon(
-                    Icons.circle,
-                    size: 10,
-                    color:
-                        outOfStock ? Colors.red : Colors.green,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    outOfStock ? 'Out of stock' : 'In stock',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: outOfStock
-                          ? Colors.red
-                          : Colors.green,
+              // 🔒 FIXED CONTENT HEIGHT
+              SizedBox(
+                height: 70,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.circle,
+                          size: 10,
+                          color: outOfStock
+                              ? Colors.red
+                              : Colors.green,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          outOfStock
+                              ? 'Out of stock'
+                              : 'In stock',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: outOfStock
+                                ? Colors.red
+                                : Colors.green,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
 
               const SizedBox(height: 6),
 
-              // PRICE
-              Text(
-                '₹ ${product.price} / ${product.unit}',
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.green,
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '₹ ${product.price} / ${product.unit}',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
                 ),
               ),
 
               const Spacer(),
 
-              // ADD / QUANTITY
+              // ADD / QUANTITY (FIXED BOTTOM)
               SizedBox(
                 height: 42,
                 width: double.infinity,
@@ -370,8 +426,7 @@ class _HomeScreenState extends State<HomeScreen>
                               _qtyButton(
                                 icon: Icons.remove,
                                 onTap: () =>
-                                    _decreaseQty(
-                                        product.id, qty),
+                                    _decreaseQty(product.id, qty),
                               ),
                               Container(
                                 padding:
@@ -380,8 +435,7 @@ class _HomeScreenState extends State<HomeScreen>
                                   vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors
-                                      .green.shade100,
+                                  color: Colors.green.shade100,
                                   borderRadius:
                                       BorderRadius.circular(20),
                                 ),
@@ -395,11 +449,10 @@ class _HomeScreenState extends State<HomeScreen>
                               ),
                               _qtyButton(
                                 icon: Icons.add,
-                                onTap: qty >=
-                                        product.stock
+                                onTap: qty >= product.stock
                                     ? null
-                                    : () => _increaseQty(
-                                        product.id),
+                                    : () =>
+                                        _increaseQty(product.id),
                               ),
                             ],
                           ),
