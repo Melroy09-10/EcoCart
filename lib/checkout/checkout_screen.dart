@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import 'payment_method_screen.dart';
+import '../orders/order_history_screen.dart';
+
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -11,25 +14,44 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String? selectedAddressId;
+  double totalAmount = 0;
 
-  Stream<QuerySnapshot> _addressStream() {
-    final uid = FirebaseAuth.instance.currentUser!.uid;
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('addresses')
-        .snapshots();
+  String get uid => FirebaseAuth.instance.currentUser!.uid;
+
+  @override
+  void initState() {
+    super.initState();
+    _calculateTotalAmount();
   }
 
-  Future<void> _placeOrder() async {
+  /// 🔹 CALCULATE CART TOTAL
+  Future<void> _calculateTotalAmount() async {
+    final cartSnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('cart')
+        .get();
+
+    double sum = 0;
+    for (var doc in cartSnapshot.docs) {
+      final data = doc.data();
+      sum += (data['price'] ?? 0) * (data['quantity'] ?? 1);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      totalAmount = sum;
+    });
+  }
+
+  /// 🔹 PLACE ORDER
+  Future<void> _placeOrder(String paymentMethod) async {
     if (selectedAddressId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select an address')),
       );
       return;
     }
-
-    final uid = FirebaseAuth.instance.currentUser!.uid;
 
     final cartRef = FirebaseFirestore.instance
         .collection('users')
@@ -45,7 +67,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         .collection('users')
         .doc(uid)
         .collection('addresses')
-        .doc(selectedAddressId)
+        .doc(selectedAddressId!)
         .get();
 
     await FirebaseFirestore.instance
@@ -54,21 +76,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         .collection('orders')
         .add({
       'items': items,
-      'address': addressDoc.data(),
+      'address': addressDoc.data() ?? {},
+      'totalAmount': totalAmount,
+      'paymentMethod': paymentMethod,
+      'paymentStatus': paymentMethod == 'UPI' ? 'PAID' : 'PENDING',
+      'orderStatus': 'PLACED',
       'createdAt': Timestamp.now(),
-      'status': 'Placed',
     });
 
+    // Clear cart
     for (var doc in cartSnapshot.docs) {
       await doc.reference.delete();
     }
 
-    if (mounted) {
-      Navigator.popUntil(context, (route) => route.isFirst);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Order placed successfully')),
-      );
-    }
+    if (!mounted) return;
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const OrderHistoryScreen(),
+      ),
+    );
   }
 
   @override
@@ -76,69 +104,106 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Checkout')),
       body: StreamBuilder<QuerySnapshot>(
-        stream: _addressStream(),
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('addresses')
+            .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final addresses = snapshot.data!.docs;
 
-          return Column(
+          return ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              Expanded(
-                child: addresses.isEmpty
-                    ? const Center(
-                        child: Text('No address found. Add one.'),
-                      )
-                    : ListView(
-                        children: addresses.map((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return RadioListTile(
-                            value: doc.id,
-                            groupValue: selectedAddressId,
-                            onChanged: (value) {
-                              setState(() {
-                                selectedAddressId = value;
-                              });
-                            },
-                            title: Text(data['name']),
-                            subtitle: Text(
-                              '${data['address']}\n${data['phone']}',
-                            ),
-                          );
-                        }).toList(),
+              const Text(
+                'Delivery Address',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+
+              if (addresses.isEmpty)
+                const Text('No address found')
+              else
+                ...addresses.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return Card(
+                    child: RadioListTile<String>(
+                      value: doc.id,
+                      groupValue: selectedAddressId,
+                      onChanged: (val) {
+                        setState(() {
+                          selectedAddressId = val;
+                        });
+                      },
+                      title: Text(data['name'] ?? 'No Name'),
+                      subtitle: Text(
+                        '${data['address'] ?? ''}\n${data['phone'] ?? ''}',
                       ),
+                    ),
+                  );
+                }),
+
+              const SizedBox(height: 20),
+
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _row('Items Total', '₹$totalAmount'),
+                      const Divider(),
+                      _row('Total Amount', '₹$totalAmount', bold: true),
+                    ],
+                  ),
+                ),
               ),
 
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pushNamed(context, '/address');
-                        },
-                        child: const Text('Add New Address'),
+              const SizedBox(height: 30),
+
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    final paymentMethod = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PaymentMethodScreen(
+                          totalAmount: totalAmount,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _placeOrder,
-                        child: const Text('Place Order'),
-                      ),
-                    ),
-                  ],
+                    );
+
+                    if (paymentMethod != null) {
+                      await _placeOrder(paymentMethod);
+                    }
+                  },
+                  child: const Text('Place Order'),
                 ),
-              )
+              ),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _row(String label, String value, {bool bold = false}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ],
     );
   }
 }

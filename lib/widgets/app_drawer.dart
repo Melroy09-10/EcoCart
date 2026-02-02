@@ -8,6 +8,7 @@ import '../screens/home/home_screen.dart';
 import '../screens/products/product_list_screen.dart';
 import '../screens/profile/edit_profile_screen.dart';
 import '../screens/auth/login_screen.dart';
+import '../screens/admin/send_notification_screen.dart';
 
 class AppDrawer extends StatelessWidget {
   AppDrawer({super.key});
@@ -29,8 +30,11 @@ class AppDrawer extends StatelessWidget {
                   ? NetworkImage(user!.photoURL!)
                   : null,
               child: user?.photoURL == null
-                  ? const Icon(Icons.person,
-                      size: 40, color: Colors.green)
+                  ? const Icon(
+                      Icons.person,
+                      size: 40,
+                      color: Colors.green,
+                    )
                   : null,
             ),
             accountName: Text(user?.displayName ?? 'User'),
@@ -48,7 +52,8 @@ class AppDrawer extends StatelessWidget {
               Navigator.pushReplacement(
                 context,
                 MaterialPageRoute(
-                    builder: (_) => const HomeScreen()),
+                  builder: (_) => const HomeScreen(),
+                ),
               );
             },
           ),
@@ -67,10 +72,24 @@ class AppDrawer extends StatelessWidget {
             },
           ),
 
-          // ================= PRODUCTS (ADMIN) =================
+          // ================= SEND NOTIFICATION =================
           ListTile(
-            leading: const Icon(Icons.inventory_2_outlined),
-            title: const Text('Products'),
+            leading: const Icon(Icons.notifications),
+            title: const Text('Send Notification'),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SendNotificationScreen(),
+                ),
+              );
+            },
+          ),
+
+          // ================= PRODUCTS =================
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings_sharp),
+            title: const Text('Admin'),
             onTap: () {
               Navigator.push(
                 context,
@@ -86,7 +105,7 @@ class AppDrawer extends StatelessWidget {
             leading: const Icon(Icons.history),
             title: const Text('Order History'),
             onTap: () {
-              // optional later
+              // later
             },
           ),
 
